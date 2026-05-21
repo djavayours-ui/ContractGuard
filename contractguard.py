@@ -55,15 +55,62 @@ class ContractGuardMod(loader.Module):
     strings = {
         "name": "ContractGuard",
 
-        "auto_on": "✅ <b>Auto javob yoqildi</b>",
-        "auto_off": "❌ <b>Auto javob o'chirildi</b>",
-        "contract_not_found": "⚠️ <b>SHARTNOMA TOPILMADI</b>",
-        "user_not_found": "⚠️ <b>User topilmadi</b>",
-        "channel_not_found": "⚠️ <b>Kanal topilmadi</b>",
+        "auto_on":
+            "✅ <b>Auto javob yoqildi</b>",
+
+        "auto_off":
+            "❌ <b>Auto javob o'chirildi</b>",
+
+        "contract_not_found":
+            "⚠️ <b>SHARTNOMA TOPILMADI</b>",
+
+        "user_not_found":
+            "⚠️ <b>User topilmadi</b>",
+
+        "channel_not_found":
+            "⚠️ <b>Kanal topilmadi</b>",
     }
 
-    strings_ru = {
-        "auto_on": "✅ <b>Автоответ включен</b>",
+    EMOJIS = {
+
+        "CONTRACT":
+            5258331647358540449,
+
+        "CHANNEL":
+            5257969839313526622,
+
+        "USER":
+            5257965810634202885,
+
+        "CODE":
+            5258476306152038031,
+
+        "TIME":
+            5258419835922030550,
+
+        "SUCCESS":
+            5260726538302660868,
+
+        "DELETE":
+            5258130763148172425,
+
+        "ERROR":
+            5260342697075416641,
+
+        "ID":
+            5258503720928288433,
+
+        "DURATION":
+            5260687119092817530,
+
+        "STATUS":
+            5359719332542718652,
+
+        "WARNING":
+            5260249440450520061,
+
+        "RECYCLE":
+            5260687681733533075
     }
 
     def __init__(self):
@@ -173,50 +220,8 @@ class ContractGuardMod(loader.Module):
         )
 
     # =====================================================
-    # PREMIUM EMOJIS
+    # PREMIUM SYSTEM
     # =====================================================
-
-    EMOJIS = {
-
-        "CONTRACT":
-            5258331647358540449,
-
-        "CHANNEL":
-            5257969839313526622,
-
-        "USER":
-            5257965810634202885,
-
-        "CODE":
-            5258476306152038031,
-
-        "TIME":
-            5258419835922030550,
-
-        "SUCCESS":
-            5260726538302660868,
-
-        "DELETE":
-            5258130763148172425,
-
-        "ERROR":
-            5260342697075416641,
-
-        "ID":
-            5258503720928288433,
-
-        "DURATION":
-            5260687119092817530,
-
-        "STATUS":
-            5359719332542718652,
-
-        "WARNING":
-            5260249440450520061,
-
-        "RECYCLE":
-            5260687681733533075
-    }
 
     def _build_entities(
         self,
@@ -342,4 +347,218 @@ class ContractGuardMod(loader.Module):
             formatting_entities=all_entities,
 
             reply_to=reply_to
+        )
+
+    # =====================================================
+    # LINK EXTRACTOR
+    # =====================================================
+
+    def extract_link(
+        self,
+        text: str
+    ):
+
+        pattern = (
+            r"(https?:\/\/t\.me\/\+[^\s]+|"
+            r"https?:\/\/t\.me\/joinchat\/[^\s]+|"
+            r"t\.me\/\+[^\s]+|"
+            r"t\.me\/joinchat\/[^\s]+|"
+            r"https?:\/\/t\.me\/[^\s]+|"
+            r"t\.me\/[^\s]+|"
+            r"@[A-Za-z0-9_]+)"
+        )
+
+        match = re.search(
+            pattern,
+            text
+        )
+
+        if match:
+            return match.group(0)
+
+        return None
+
+    # =====================================================
+    # RESOLVE USER
+    # =====================================================
+
+    async def resolve_user(
+        self,
+        user
+    ):
+
+        try:
+
+            if str(user).startswith("@"):
+
+                return await self._client.get_entity(
+                    user
+                )
+
+            return await self._client.get_entity(
+                int(user)
             )
+
+        except:
+            return None
+
+    # =====================================================
+    # MONITOR LOOP
+    # =====================================================
+
+    async def monitor_loop(self):
+
+        while True:
+
+            try:
+
+                for uid, data in list(
+                    self._contracts.items()
+                ):
+
+                    if not data.get("active"):
+                        continue
+
+                    try:
+
+                        await self._client(
+
+                            GetParticipantRequest(
+
+                                channel=self.config[
+                                    "my_channel"
+                                ],
+
+                                participant=int(uid)
+                            )
+                        )
+
+                    except UserNotParticipantError:
+
+                        data["active"] = False
+
+                        data["broken_at"] = int(
+                            time.time()
+                        )
+
+                        duration = (
+
+                            int(time.time())
+                            -
+                            data["created"]
+                        )
+
+                        text = (
+
+                            "⚠️ <b>SHARTNOMA BUZILDI</b>\n\n"
+
+                            f"👤 @{data['username']}\n\n"
+
+                            f"📁 {data['their_channel_text']}\n\n"
+
+                            f"🔐 <code>{data['code']}</code>\n\n"
+
+                            f"⏳ <code>{self.format_time(duration)}</code>"
+                        )
+
+                        await self.premium_send(
+
+                            self.config["log_chat"],
+
+                            text
+                        )
+
+                    except Exception as e:
+                        logger.exception(e)
+
+            except Exception as e:
+                logger.exception(e)
+
+            await asyncio.sleep(
+                self.config["check_delay"]
+            )
+
+    # =====================================================
+    # AUTO COMMAND
+    # =====================================================
+
+    @loader.command(
+        ru_doc="Автоответ",
+    )
+    async def auto(
+        self,
+        message: Message
+    ):
+        """
+        Auto javob boshqaruvi
+        """
+
+        args = utils.get_args_raw(
+            message
+        )
+
+        if not args:
+
+            return await utils.answer(
+
+                message,
+
+                (
+                    "📊 <b>AUTO STATUS</b>\n\n"
+
+                    f"📁 <code>{self._auto_group}</code>\n\n"
+
+                    f"✅ <b>{self._auto_enabled}</b>"
+                )
+            )
+
+        if args.lower() == "on":
+
+            self._auto_enabled = True
+
+            self.set(
+                "auto_enabled",
+                True
+            )
+
+            return await utils.answer(
+                message,
+                self.strings("auto_on")
+            )
+
+        if args.lower() == "off":
+
+            self._auto_enabled = False
+
+            self.set(
+                "auto_enabled",
+                False
+            )
+
+            return await utils.answer(
+                message,
+                self.strings("auto_off")
+            )
+
+    # =====================================================
+    # WATCHER
+    # =====================================================
+
+    @loader.watcher(
+        "no_commands",
+        "only_messages",
+        "in"
+    )
+    async def watcher(
+        self,
+        message: Message
+    ):
+
+        if not self._auto_enabled:
+            return
+
+        if message.out:
+            return
+
+        if not message.raw_text:
+            return
